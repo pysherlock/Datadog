@@ -13,6 +13,7 @@ import org.apache.hadoop.fs
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, Hours}
 import DatadogEncoders._
+import org.apache.hadoop.fs.Path
 
 
 object DataDog extends TParam {
@@ -25,7 +26,7 @@ object DataDog extends TParam {
   /** Link of pageviews */
   final val PAGEVIEWS = "https://dumps.wikimedia.org/other/pageviews/"
   /** Path of download files*/
-  final val DATA_PATH = "src/main/resources/data/"
+  final val DATA_PATH = getClass.getClassLoader.getResource("data").getPath+"/"
 
   def fileDownloader(url: String): String = {
     try {
@@ -37,7 +38,7 @@ object DataDog extends TParam {
         buffer = src.read()
         out.write(buffer)
       }
-      out.close(); src.close(); filename
+      out.close(); src.close(); DATA_PATH+filename
     } catch {
       case e: Throwable => println("Fail to Download the File")
         e.printStackTrace()
@@ -54,8 +55,8 @@ object DataDog extends TParam {
       val hoursCount = Hours.hoursBetween(startDate, endDate).getHours
 
       // Download one file per hour and put in Spark Dataset
-      import spark.implicits._
-      val pageviews = spark.emptyDataset[String]
+//      import spark.implicits._
+//      val pageviews = spark.emptyDataset[String]
 
       (0 until hoursCount).foreach{i =>
         val time = startDate.plusHours(i)
@@ -63,23 +64,25 @@ object DataDog extends TParam {
         val month = if(m < 10) s"0$m" else m.toString
         val day = if(d < 10) s"0$d" else d.toString
         val hour = if(h < 10) s"0$h" else h.toString
-        val file = s"pageviews-$year$month$day-${hour}0000.gz"
+        val file = DATA_PATH+s"pageviews-$year$month$day-${hour}0000.gz"
 
         // Download the file when it is unavailable
         val FS = fs.FileSystem.get(sc.hadoopConfiguration)
-        if(FS.exists(new fs.Path(DATA_PATH+file))) {
+        println(file)
+        println(new Path(file).getName)
+        if(FS.exists(new fs.Path(file))) {
           println(s"$file exists")
-          pageviews.union(spark.read.textFile(DATA_PATH+file))
+//          pageviews.union(spark.read.textFile(DATA_PATH+file))
         }
         else {
           println(s"$file doesn't exists, start downloading")
-          pageviews.union(spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file")))
+//          pageviews.union(spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file")))
         }
 
       }
       /** TODO: Algorithm part for page views */
-      println(pageviews.count())
-      pageviews.show()
+//      println(pageviews.count())
+//      pageviews.show()
       true
       }
     println("Finish of Datadog")
