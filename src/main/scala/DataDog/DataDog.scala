@@ -56,7 +56,7 @@ object DataDog extends TParam with TFileUtils {
 
       // Download one file per hour and put in Spark Dataset
       import spark.implicits._
-//      var pageviews = spark.emptyDataset[String]
+      var pageviews = spark.emptyDataset[String]
 
       (0 until hoursCount).foreach{i =>
         val time = startDate.plusHours(i)
@@ -72,16 +72,15 @@ object DataDog extends TParam with TFileUtils {
         val FS = fs.FileSystem.get(sc.hadoopConfiguration)
         if(FS.exists(new fs.Path(file))) {
           println(s"$file exists")
-//          pageviews = pageviews.union(spark.read.textFile(file))
+          pageviews = spark.read.textFile(file)
         }
         else {
           println(s"$file doesn't exists, start downloading")
           fileDownloader(PAGEVIEWS+s"$year/$year-$month/$filename")
-//          pageviews = pageviews.union(spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file")))
+          pageviews = spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file"))
         }
 
       }
-      val pageviews = spark.read.textFile(DATA_PATH).filter()
       /** TODO: Algorithm part for page views */
 //      println(pageviews.count())
 //      pageviews.show()
