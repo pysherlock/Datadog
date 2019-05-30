@@ -56,7 +56,10 @@ object DataDog extends TParam with TFileUtils {
 
       // Download one file per hour and put in Spark Dataset
       import spark.implicits._
-      var pageviews = spark.emptyDataset[String]
+
+      val blackList = spark.read.textFile(BLACK_LIST)
+        .map(l => PageViews(l).getDomainPage)
+        .distinct().collect().toSet
 
       (0 until hoursCount).foreach{i =>
         val time = startDate.plusHours(i)
@@ -72,27 +75,31 @@ object DataDog extends TParam with TFileUtils {
         val FS = fs.FileSystem.get(sc.hadoopConfiguration)
         if(FS.exists(new fs.Path(file))) {
           println(s"$file exists")
-          pageviews = spark.read.textFile(file)
-        }
-        else {
+          val pageviews = spark.read.textFile(file)
+            .map(l => PageViews(l)).filter(p => !blackList.contains(p.getDomainPage))
+            .groupByKey(_.getDomainPage)
+            .reduceGroups((a, b) => PageViews(a.domain, a.page, a.views+b.views, a.response_size+b.response_size))
+            .map(_._2).groupByKey(_.domain).flatMapGroups((d, it) => it.toList.sortWith(_.views > _.views).slice(0, 25))
+            .write.csv(buildPath(DATA_PATH +: "result" +: s"pageviews-result-$year$month$day-${hour}0000" +: Nil))
+
+
+        } else {
           println(s"$file doesn't exists, start downloading")
-          fileDownloader(PAGEVIEWS+s"$year/$year-$month/$filename")
-          pageviews = spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file"))
+//          fileDownloader(PAGEVIEWS+s"$year/$year-$month/$filename")
+          /** TODO: Algorithm part for page views */
+          val pageviews = spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file"))
+            .map(l => PageViews(l)).filter(p => !blackList.contains(p.getDomainPage))
+            .groupByKey(_.getDomainPage)
+            .reduceGroups((a, b) => PageViews(a.domain, a.page, a.views+b.views, a.response_size+b.response_size))
+            .map(_._2).groupByKey(_.domain).flatMapGroups((d, it) => it.toList.sortWith(_.views > _.views).slice(0, 25))
+            .collect()
+          pageviews
+
         }
 
       }
-      /** TODO: Algorithm part for page views */
-//      println(pageviews.count())
-//      pageviews.show()
       true
       }
     println("Finish of Datadog")
     }
-
-//
-//    /** Test part */
-//    val blackListPath = getClass.getResource("src/main/resources/blacklist_domains_and_pages").getPath
-//    println(blackListPath)
-
-
 }
