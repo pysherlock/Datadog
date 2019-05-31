@@ -61,7 +61,6 @@
 
     <build>
         <sourceDirectory>src/main/scala</sourceDirectory>
-        <testSourceDirectory>src/test/scala</testSourceDirectory>
         <plugins>
           <plugin>
             <groupId>org.scala-tools</groupId>
@@ -70,7 +69,6 @@
               <execution>
                 <goals>
                   <goal>compile</goal>
-                  <goal>testCompile</goal>
                 </goals>
               </execution>
             </executions>
@@ -81,25 +79,30 @@
               </args>
             </configuration>
           </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-eclipse-plugin</artifactId>
-            <configuration>
-              <downloadSources>true</downloadSources>
-              <buildcommands>
-                <buildcommand>ch.epfl.lamp.sdt.core.scalabuilder</buildcommand>
-              </buildcommands>
-              <additionalProjectnatures>
-                <projectnature>ch.epfl.lamp.sdt.core.scalanature</projectnature>
-              </additionalProjectnatures>
-              <classpathContainers>
-                <classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER</classpathContainer>
-                <classpathContainer>ch.epfl.lamp.sdt.launching.SCALA_CONTAINER</classpathContainer>
-              </classpathContainers>
-            </configuration>
-          </plugin>
+
+            <!-- Builds the application bundles (TAR.GZ) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>app-targz</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>src/main/resources/assemblies/bundle.xml</descriptor>
+                            </descriptors>
+                            <appendAssemblyId>false</appendAssemblyId>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
     <reporting>
         <plugins>
           <plugin>

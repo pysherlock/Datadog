@@ -5,7 +5,7 @@ import java.net.URL
 
 import scala.io.Source
 import java.net.URL
-import java.io.{File, FileOutputStream, FileWriter}
+import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
@@ -13,10 +13,10 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.hadoop.fs
 import org.joda.time.format.DateTimeFormat
 import org.joda.time.{DateTime, Hours}
-import org.apache.hadoop.fs.Path
-
 import DatadogEncoders._
 import SystemConfig._
+import javafx.print.Printer
+import org.apache.hadoop.fs.Path
 
 
 object DataDog extends TParam with TFileUtils {
@@ -24,12 +24,11 @@ object DataDog extends TParam with TFileUtils {
   lazy val conf = new SparkConf()
   lazy val spark = SparkSession.builder.config(conf).getOrCreate()
   lazy val sc = spark.sparkContext
-  /** Path of the BLACK LIST File*/
-  val BLACK_LIST = "BLACK_LIST_PATH"
   /** Link of pageviews */
   final val PAGEVIEWS = "https://dumps.wikimedia.org/other/pageviews/"
   /** Path of download files */
-  lazy val DATA_PATH = Params.getOrElse(DATA, System.getProperty("user.dir"))
+  lazy val DATA_PATH = Params.getOrElse(DATA, s"file:///${System.getProperty("user.dir")}")
+  lazy val BLACK_LIST_PATH = Params.getOrElse(BLACK_LIST, s"file:///${System.getProperty("user.dir")}")
 
   def fileDownloader(url: String): String = {
     try {
@@ -57,10 +56,12 @@ object DataDog extends TParam with TFileUtils {
       // Download one file per hour and put in Spark Dataset
       import spark.implicits._
 
-      val blackList = spark.read.textFile(BLACK_LIST)
+      // Read the blacklist
+      val blackList = spark.read.textFile(BLACK_LIST_PATH)
         .map(l => PageViews(l).getDomainPage)
         .distinct().collect().toSet
 
+      // Do the analyze per hour
       (0 until hoursCount).foreach{i =>
         val time = startDate.plusHours(i)
         val (year, m, d, h) = (time.getYear, time.getMonthOfYear, time.getDayOfMonth, time.getHourOfDay)
@@ -70,36 +71,37 @@ object DataDog extends TParam with TFileUtils {
         val hour = if(h < 10) s"0$h" else h.toString
         val filename = s"pageviews-$year$month$day-${hour}0000.gz"
         val file = buildPath(DATA_PATH +: s"pageviews-$year$month$day-${hour}0000.gz" +: Nil)
+        val resultPath = buildPath(DATA_PATH +: "result" +: s"pageviews-result-$year$month$day-${hour}0000" +: Nil)
 
-        // Download the file when it is unavailable
         val FS = fs.FileSystem.get(sc.hadoopConfiguration)
-        if(FS.exists(new fs.Path(file))) {
-          println(s"$file exists")
-          val pageviews = spark.read.textFile(file)
-            .map(l => PageViews(l)).filter(p => !blackList.contains(p.getDomainPage))
-            .groupByKey(_.getDomainPage)
-            .reduceGroups((a, b) => PageViews(a.domain, a.page, a.views+b.views, a.response_size+b.response_size))
-            .map(_._2).groupByKey(_.domain).flatMapGroups((d, it) => it.toList.sortWith(_.views > _.views).slice(0, 25))
-            .write.csv(buildPath(DATA_PATH +: "result" +: s"pageviews-result-$year$month$day-${hour}0000" +: Nil))
+        // Do the analyze if necessary
+        if(!FS.exists(new Path(resultPath))) {
+          def pageViewsAnalyzer(input: String): Array[PageViews] = {
+            spark.read.textFile(input)
+              .map(l => PageViews(l)).filter(p => !blackList.exists(b => p.getDomainPage.belongsTo(b)))
+              .groupByKey(_.getDomainPage)
+              .reduceGroups((a, b) => PageViews(a.domain, a.page, a.views+b.views, a.response_size+b.response_size))
+              .map(_._2).groupByKey(_.domain).flatMapGroups((d, it) => it.toList.sortWith(_.views > _.views).slice(0, 25))
+              .collect()
+          }
 
-
-        } else {
-          println(s"$file doesn't exists, start downloading")
-//          fileDownloader(PAGEVIEWS+s"$year/$year-$month/$filename")
-          /** TODO: Algorithm part for page views */
-          val pageviews = spark.read.textFile(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file"))
-            .map(l => PageViews(l)).filter(p => !blackList.contains(p.getDomainPage))
-            .groupByKey(_.getDomainPage)
-            .reduceGroups((a, b) => PageViews(a.domain, a.page, a.views+b.views, a.response_size+b.response_size))
-            .map(_._2).groupByKey(_.domain).flatMapGroups((d, it) => it.toList.sortWith(_.views > _.views).slice(0, 25))
-            .collect()
-          pageviews
-
+          // Only Download the file when it is unavailable
+          val pageViews = if(FS.exists(new fs.Path(file))) {
+            println(s"$file exists")
+            pageViewsAnalyzer(file)
+          } else {
+            println(s"$file doesn't exists, start downloading")
+//            fileDownloader(PAGEVIEWS+s"$year/$year-$month/$filename")
+            pageViewsAnalyzer(fileDownloader(PAGEVIEWS+s"$year/$year-$month/$file"))
+          }
+          // Save the result to local file
+          val writer = new PrintWriter(new File(buildPath(DATA_PATH +: "result" +: s"pageviews-result-$year$month$day-${hour}0000" +: Nil)))
+          pageViews.foreach(p => writer.write(p.toString))
+          writer.close()
         }
-
       }
       true
-      }
-    println("Finish of Datadog")
     }
+    println("Finish of Datadog")
+  }
 }
