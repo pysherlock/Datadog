@@ -4,7 +4,11 @@ import java.io.File
 import scala.collection.mutable.Map
 
 trait TFileUtils {
-
+  /** Build a path string from a list of strings
+    *
+    * @param segs A list of strings
+    * @return The string of the path
+    */
   def buildPath(segs: List[String]): String = new File(segs.mkString(File.separator)).getPath
 
 }
@@ -20,12 +24,12 @@ trait TParam {
   val HELP = "-h"
 
   val usage: String = "Usage: cmd " +
-    START_DATE + " Start date (format: 2019-05-01:00)\n" +
-    END_DATE + " End date (format: 2019-05-02:00)\n" +
+    START_DATE + " Start date (format: 2019-05-01:00) - mandatory\n" +
+    END_DATE + " End date (format: 2019-05-02:00) - mandatory\n" +
     DATA + " Path of downloaded data\n" +
     BLACK_LIST + "Path of blacklist file\n"
     RESULT + " Path to save the result\n" +
-    CONFIG + " Path of configuration file"
+    CONFIG + " Path of configuration file (Coming soon)"
 }
 
 object SystemConfig extends TParam {
@@ -34,6 +38,11 @@ object SystemConfig extends TParam {
 
   protected[DataDog] var Params: OptionMap = Map.empty[String, String]
 
+  /** Parsing the command line
+    *
+    * @param args The input command line
+    * @return A Map with all extracted configurations
+    */
   def parseCmdLine(args: Array[String]): Option[OptionMap] = {
     if(args.isEmpty || args(0) == HELP) {
       println(usage); None
@@ -50,7 +59,8 @@ object SystemConfig extends TParam {
             case _ =>
           }
         }
-        Some(Params)
+        if(Params.contains(START_DATE) && Params.contains(END_DATE)) Some(Params)
+        else { println(usage); None}
       } catch {
         case e: Exception => println(usage); None
       }

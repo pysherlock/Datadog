@@ -1,0 +1,47 @@
+How To:
+
+Dependencies: Spark 2.1+, Scala 2.11.x, Java 1.8,
+
+* Run the application:
+    Unzip the tarball, run the following command inside the tarball directory:
+
+    Example:
+        spark-submit --master local[*] --name "DataDog 1.0.0" --class DataDog.DataDog bin/Datadog-1.0.jar -StartDate 2019-05-01:23 -EndDate 2019-05-02:01
+
+    The folders of downloaded data, blacklist, and results by default are in the current directory. Of course you can specify them by yourself.
+    Just to make sure the paths for data, result, and blacklist are exist.
+
+    Example:
+        spark-submit --master local[*] --name "DataDog 1.0.0" --class DataDog.DataDog bin/Datadog-1.0.jar -StartDate 2019-05-01:23 -EndDate 2019-05-02:01
+         -Data /data -Result /result -Blacklist /blacklist_domains_and_pages
+
+
+
+Additional Q&A:
+1. What additional things would you want to operate this application in a production setting?
+A: There will be several improvements
+    (1). Add logger (ex: log4j) for the log management.
+    (2). Automation scheduler to manager the job.
+    (3). Add unit test and non-regression test.
+    (4). Change configuration fetching from the command line to parsing the configuration file.
+
+2. What might change about your solution if this application needed to run automatically for each hour of the day?
+A: I would add one scheduler to the application in order to coordinate the starting of the job for every hour.
+    Oozie can be a good choice for the production environment. It could let us start a bundle of jobs by time and file availability.
+
+3. How would you test this application?
+A:
+    (1). Unit-Test: test every specific functionality part with a test dataset.
+    Like the data analyze part, make sure the result of data analyzer is correct with test dataset
+    (2). Non-Regression Test: test the whole workflow to make sure that the application works fine.
+    For example, the test would start the application with a test dataset. The test would include the entire workflow:
+    read configuration from the command line, check files availability, download files if needed, analyze data and output the result, check the correctness of the result.
+
+4. How you’d improve on this application design?
+A:  (1). The input configuration currently is fetched through the command line. For the improvement, I would use configuration file.
+    The idea is only passing the path of configuration file through the command line. As the result, the application would get
+    all the configuration items by parsing the configuration file. The user should always specify their customized data path instead of
+    using the default one.
+    (2). I will replace the download part by shell script, instead of coding inside application. So that the application can only
+    focus on the data analyze. And the download script can be will scheduled with the application by Oozie. The workflow can be:
+    Time => Download the file by script => Check the file's availability => Start the job

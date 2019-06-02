@@ -26,7 +26,7 @@ case class PageViews(domain: String = "", page: String = "", views: Int = 0, res
 
   override def hashCode(): Int = domainPage.hashCode
 
-  override def toString: String = s"$domain $page $views $response_size"
+  override def toString: String = s"$domain $page $views $response_size\n"
 
 }
 
